@@ -29,7 +29,6 @@ def handle_cookie_modal(driver, thread_id):
     except Exception:
         print(f"Thread-{thread_id}: No cookie modal.")
 
-
 def extract_links(driver, thread_id, number_of_links=10):
     """Extracts a specified number of unique article links."""
     links = []
@@ -44,7 +43,6 @@ def extract_links(driver, thread_id, number_of_links=10):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(1)  # Avoid server overload
     return links
-
 
 def handle_story_continues(driver, thread_id, link):
     """Handles 'Story continues' or 'Continue Reading' buttons on article pages."""
@@ -62,6 +60,7 @@ def handle_story_continues(driver, thread_id, link):
         print(f"Thread-{thread_id}: No 'Story continues' button for {link}.")
 
 def handle_external_articles(driver, thread_id, link):
+    
     return 
 
 def scrape_article(driver, thread_id, link):
@@ -85,7 +84,6 @@ def scrape_article(driver, thread_id, link):
         print(f"Thread-{thread_id}: Error scraping article at {link}: {e}")
         return None
 
-
 def scrape_links_and_articles(url, results, thread_id, service, options, number_of_links):
     """Main function to scrape links and articles from the given URL."""
     driver = setup_driver(service, options)
@@ -93,7 +91,6 @@ def scrape_links_and_articles(url, results, thread_id, service, options, number_
         print(f"Thread-{thread_id}: Starting...")
         driver.get(url)
 
-        # Handle cookie modal
         handle_cookie_modal(driver, thread_id)
 
         # Extract links
@@ -108,7 +105,6 @@ def scrape_links_and_articles(url, results, thread_id, service, options, number_
     finally:
         driver.quit()
         print(f"Thread-{thread_id}: Done.")
-
 
 def scrape_dynamic_links_and_articles(url, total_links=20, num_threads=1):
     results = []
@@ -134,6 +130,15 @@ def scrape_dynamic_links_and_articles(url, total_links=20, num_threads=1):
     print(f"Collected {len(results)} articles in {elapsed_time:.2f} seconds.")  
     return results
 
+def check_if_article_requires_subscription(driver, thread_id, link):
+    publishers = driver.find_element((By.CLASS_NAME, "publishing yf-1weyqlp"))
+    
+    #Also iterate though all of the items 
+    #Have a list of predefined publishers that require subsriptions example below dict
+    publishers_w_subscriptions = {}
+    for publisher in publishers:
+        if publisher in publishers_w_subscriptions:
+            return
 
 # Example 
 if __name__ == "__main__":
