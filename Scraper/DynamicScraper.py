@@ -44,6 +44,40 @@ def extract_links(driver, thread_id, number_of_links=10):
         time.sleep(1)  # Avoid server overload
     return links
 
+def extract_title(driver, thread_id, link):
+    try: 
+        title_element = driver.find_element(By.CLASS_NAME, "cover-title.yf-1o1tx8g")
+        title = title_element.text.strip() if title_element else None
+        
+        if title: 
+            return title
+        else:
+            print("No title found")
+            return None
+    except Exception as e:
+        print(f"Thread-{thread_id}: Error scraping title for this article at {link}")
+def extract_author_date_published(driver, thread_id, link):
+    try:
+        # Extract the author
+        author_element = driver.find_element(By.CLASS_NAME, "primary-link.fin-size-large.noUnderline.yf-1e4diqp")
+        author = author_element.text.strip() if author_element else None
+
+        # Extract the date published
+        date_published_element = driver.find_element(By.CLASS_NAME, "byline-attr-meta-time")
+        date_published = date_published_element.get_attribute("datetime") if date_published_element else None
+
+        # Check if author exists
+        if author:
+            return author, date_published
+        else:
+            print(f"Thread-{thread_id}: No author found for this article at {link}")
+            return None, date_published
+
+    except Exception as e:
+        print(f"Thread-{thread_id}: Error scraping author or date published at {link}: {e}")
+        return None, None
+
+        
 def handle_story_continues(driver, thread_id, link):
     """Handles 'Story continues' or 'Continue Reading' buttons on article pages."""
     try:
@@ -60,11 +94,9 @@ def handle_story_continues(driver, thread_id, link):
         print(f"Thread-{thread_id}: No 'Story continues' button for {link}.")
 
 def handle_external_articles(driver, thread_id, link):
-    
     return 
 
-def scrape_article(driver, thread_id, link):
-    """Scrapes the content of an article given its link."""
+def scrape_article_information(driver, thread_id, link):
     try:
         driver.get(link)
         handle_story_continues(driver, thread_id, link)
@@ -96,12 +128,14 @@ def scrape_links_and_articles(url, results, thread_id, service, options, number_
         # Extract links
         links = extract_links(driver, thread_id, number_of_links)
         print(f"Thread-{thread_id}: Extracted {len(links)} links.")
-
+        
         # Scrape articles
         for link in links:
-            article_content = scrape_article(driver, thread_id, link)
-            if article_content:
-                results.append(article_content)
+            article_content = scrape_article_information(driver, thread_id, link)
+            author, date_published = extract_author_date_published(driver, thread_id, link)
+            title = extract_title(driver, thread_id, link)
+            if article_content and author and date_published:
+                results.append({"title": title,"content": article_content, "author":author, "date_published": date_published})
     finally:
         driver.quit()
         print(f"Thread-{thread_id}: Done.")
@@ -143,5 +177,5 @@ def check_if_article_requires_subscription(driver, thread_id, link):
 # Example 
 if __name__ == "__main__":
     url = "https://finance.yahoo.com/quote/TSLA/news/"
-    articles = scrape_dynamic_links_and_articles(url, total_links=10, num_threads=2)
+    articles = scrape_dynamic_links_and_articles(url, total_links=5, num_threads=2)
     print(articles)

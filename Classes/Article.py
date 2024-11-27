@@ -1,7 +1,5 @@
 class Article:
-    def __init__(self, articleId ,title, content, date_published, author, source):
-        
-        self.articleId = articleId
+    def __init__(self ,title, content, date_published, author, source): 
         self.title = title  
         self.content = content
         self.date_published = date_published

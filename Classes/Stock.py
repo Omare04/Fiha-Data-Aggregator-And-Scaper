@@ -1,3 +1,4 @@
+# from Article import Article
 class Stock: 
     def __init__(self, ticker, company_name, sector, volume, market_cap, market, price,sentiment_score=0.0):
         self.ticker = ticker
@@ -63,8 +64,8 @@ class Stock:
             print(f"    Value: ${details['value']:,.2f}")
             print(f"    Fund Manager: {details['fund_manager']}")
             
-    def add_related_news(self, news_title, sentiment):
-        self.related_news.append({'title': news_title, 'sentiment': sentiment})
+    def add_related_news(self, news_title, content, author, date_published ,source ,sentiment):
+        self.related_news.append(Article(news_title, content, date_published,author, source))
 
     def add_related_stock(self, related_ticker, relationship_score):
         self.related_stocks[related_ticker] = relationship_score
@@ -81,3 +82,6 @@ class Stock:
         print("Related Stocks:")
         for stock, score in self.related_stocks.items():
             print(f"  - {stock}: Relationship Score {score}")
+
+    def yahoo_finance_news_article_url(self):
+        return f"https://finance.yahoo.com/quote/{self.ticker}/news/"
