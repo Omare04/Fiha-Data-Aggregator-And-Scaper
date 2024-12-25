@@ -6,7 +6,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import threading
 import time
-
+from Classes.Article import Article
 # Global Selenium options and service
 options = Options()
 options.add_argument('--headless') 
@@ -15,7 +15,6 @@ service = Service('/usr/local/bin/chromedriver')
 
 
 def setup_driver(service, options):
-    """Sets up and returns a Selenium WebDriver."""
     return webdriver.Chrome(service=service, options=options)
 
 
@@ -95,9 +94,6 @@ def handle_story_continues(driver, thread_id, link):
     except Exception:
         print(f"Thread-{thread_id}: No 'Story continues' button for {link}.")
 
-def handle_external_articles(driver, thread_id, link):
-    return 
-
 def scrape_article_information(driver, thread_id, link):
     try:
         driver.get(link)
@@ -118,9 +114,7 @@ def scrape_article_information(driver, thread_id, link):
         print(f"Thread-{thread_id}: Error scraping article at {link}: {e}")
         return None
 
-def scrape_links_and_articles(url, results, thread_id, service, options, number_of_links):
-    """Main function to scrape links and articles from the given URL."""
-    driver = setup_driver(service, options)
+def scrape_links_and_articles(url, results, thread_id, service, options, number_of_links, db, ticker, driver):
     try:
         print(f"Thread-{thread_id}: Starting...")
         driver.get(url)
@@ -133,16 +127,20 @@ def scrape_links_and_articles(url, results, thread_id, service, options, number_
         
         # Scrape articles
         for link in links:
-            article_content = scrape_article_information(driver, thread_id, link)
-            author, date_published = extract_author_date_published(driver, thread_id, link)
-            title = extract_title(driver, thread_id, link)
-            if article_content and author and date_published:
-                results.append({"title": title,"content": article_content, "author":author, "date_published": date_published})
+            scraped_articles = Article.get_article_urls_by_ticker(db,ticker)
+            if not scraped_articles or link not in scraped_articles:
+                article_content = scrape_article_information(driver, thread_id, link)
+                author, date_published = extract_author_date_published(driver, thread_id, link)
+                title = extract_title(driver, thread_id, link)
+                if article_content and author and date_published:
+                    results.append({"title": title, "content": article_content, "author":author, "date_published": date_published, "url": link})
+            else:
+                print(f"Duplicate article at {link} found, skipping this one.")
+                continue
     finally:
-        driver.quit()
         print(f"Thread-{thread_id}: Done.")
 
-def scrape_dynamic_links_and_articles(url,ticker ,total_links=20, num_threads=1):
+def scrape_dynamic_links_and_articles(url,ticker ,total_links=20, num_threads=1, db=None, driver=None):
     results = []
     threads = []
     links_per_thread = total_links // num_threads
@@ -153,7 +151,7 @@ def scrape_dynamic_links_and_articles(url,ticker ,total_links=20, num_threads=1)
     for thread_id in range(num_threads):
         thread = threading.Thread(
             target=scrape_links_and_articles, 
-            args=(url, results, thread_id, service, options, links_per_thread)
+            args=(url, results, thread_id, service, options, links_per_thread, db, ticker, driver)
         )
         threads.append(thread)
         thread.start()
@@ -177,7 +175,6 @@ def check_if_article_requires_subscription(driver, thread_id, link):
         if publisher in publishers_w_subscriptions:
             return
 
-# Example 
 if __name__ == "__main__":
     url = "https://finance.yahoo.com/quote/TSLA/news/"
     articles = scrape_dynamic_links_and_articles(url, total_links=5, num_threads=2)

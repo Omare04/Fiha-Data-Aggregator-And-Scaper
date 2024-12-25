@@ -22,10 +22,24 @@ class Article:
             "keywords": self.keywords
         }
 
-    @staticmethod
-    def insert_articles_to_db(articles: list['Article'], collection: Collection):
-        collection.insert_many([article.to_dict() for article in articles])
+    
+    def get_article_urls_by_ticker(db, ticker):
+        try:
+            articles = db["articles"].find(
+                {"company": ticker}, 
+                {"article.url": 1, "_id": 0} 
+            )
+            
+            articles_list = list(articles)
+            
+            if not articles_list:
+                # print(f"No articles found for ticker: {ticker} in the database")
+                return None
 
-    @staticmethod
-    def insert_article_to_db(article: 'Article', collection: Collection):
-        collection.insert_one(article.to_dict())
+            # Extract URLs from the result
+            urls = [article.get("article", {}).get("url") for article in articles_list if "url" in article.get("article", {})]
+            
+            return urls
+        except Exception as e:
+            print(f"Error fetching articles for {ticker}: {e}")
+            return None
