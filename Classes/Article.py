@@ -1,30 +1,31 @@
+from pymongo.collection import Collection
+
 class Article:
-    def __init__(self ,title, content, date_published, author, source): 
+    def __init__(self, title, content, date_published, author, source): 
         self.title = title  
         self.content = content
         self.date_published = date_published
         self.author = author
         self.source = source
-        self.sentiment_score = None  # Placeholder for sentiment analysis result
-        self.keywords = []  # List to store extracted keywords
+        self.sentiment_score = None  
+        self.keywords = []  
 
-    def analyze_sentiment(self, sentiment_analyzer):
-        return self
+    def to_dict(self):
+        """Convert the Article instance to a dictionary for MongoDB insertion."""
+        return {
+            "title": self.title,
+            "content": self.content,
+            "date_published": self.date_published,
+            "author": self.author,
+            "source": self.source,
+            "sentiment_score": self.sentiment_score,
+            "keywords": self.keywords
+        }
 
-    def extract_keywords(self, keyword_extractor):
-        return self
+    @staticmethod
+    def insert_articles_to_db(articles: list['Article'], collection: Collection):
+        collection.insert_many([article.to_dict() for article in articles])
 
-    def summarize(self, summarizer):
-        return self
-
-    def display_info(self):
-        """
-        Display the article's details in a readable format.
-        """
-        print(f"Title: {self.title}")
-        print(f"Author: {self.author}")
-        print(f"Date Published: {self.date_published}")
-        print(f"Source: {self.source}")
-        print(f"Sentiment Score: {self.sentiment_score}")
-        print(f"Keywords: {', '.join(self.keywords)}")
-
+    @staticmethod
+    def insert_article_to_db(article: 'Article', collection: Collection):
+        collection.insert_one(article.to_dict())

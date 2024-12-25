@@ -46,7 +46,9 @@ def extract_links(driver, thread_id, number_of_links=10):
 
 def extract_title(driver, thread_id, link):
     try: 
-        title_element = driver.find_element(By.CLASS_NAME, "cover-title.yf-1o1tx8g")
+        title_element = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "cover-title.yf-1at0uqp"))
+                )
         title = title_element.text.strip() if title_element else None
         
         if title: 
@@ -56,10 +58,11 @@ def extract_title(driver, thread_id, link):
             return None
     except Exception as e:
         print(f"Thread-{thread_id}: Error scraping title for this article at {link}")
+        
 def extract_author_date_published(driver, thread_id, link):
     try:
         # Extract the author
-        author_element = driver.find_element(By.CLASS_NAME, "primary-link.fin-size-large.noUnderline.yf-1e4diqp")
+        author_element = driver.find_element(By.CLASS_NAME, "byline-attr-author.yf-1k5w6kz")
         author = author_element.text.strip() if author_element else None
 
         # Extract the date published
@@ -76,7 +79,6 @@ def extract_author_date_published(driver, thread_id, link):
     except Exception as e:
         print(f"Thread-{thread_id}: Error scraping author or date published at {link}: {e}")
         return None, None
-
         
 def handle_story_continues(driver, thread_id, link):
     """Handles 'Story continues' or 'Continue Reading' buttons on article pages."""
@@ -140,12 +142,13 @@ def scrape_links_and_articles(url, results, thread_id, service, options, number_
         driver.quit()
         print(f"Thread-{thread_id}: Done.")
 
-def scrape_dynamic_links_and_articles(url, total_links=20, num_threads=1):
+def scrape_dynamic_links_and_articles(url,ticker ,total_links=20, num_threads=1):
     results = []
     threads = []
     links_per_thread = total_links // num_threads
 
     start_time = time.time()
+    print(f"Scraping articles for {ticker}")
 
     for thread_id in range(num_threads):
         thread = threading.Thread(

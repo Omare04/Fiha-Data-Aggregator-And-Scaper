@@ -1,1 +1,5 @@
 data
+.env
+filtered_nasdaq.json
+nasdaq.json
+nasdaq100.json

@@ -1,87 +1,71 @@
-# from Article import Article
+from pymongo.collection import Collection
+from Classes import Article
+
+
 class Stock: 
-    def __init__(self, ticker, company_name, sector, volume, market_cap, market, price,sentiment_score=0.0):
+    def __init__(self, ticker, company_name, sector, industry, market_cap, market, institutional_shareholders, mutual_fund_shareholders, price={0.0,""}, sentiment_score=0.0):
         self.ticker = ticker
         self.company_name = company_name
         self.sector = sector
+        self.industry = industry
         self.market_cap = market_cap
         self.sentiment_score = sentiment_score
         self.market = market
         self.price = price
-        self.volume = volume
         self.related_news = []  
         self.related_stocks = {}  
-        self.stakeholders = {}
-        self.mutual_fund_holders = {}
+        self.institutional_shareholders = institutional_shareholders
+        self.mutual_fund_shareholders = mutual_fund_shareholders
         self.product_involvement_areas = []
 
-    def add_stakeholder(self, stakeholder_obj):
-        self.stakeholders[stakeholder_obj.name] = {
-            "shares": stakeholder_obj.shares,
-            "percentage": stakeholder_obj.percentage,
-            "value": stakeholder_obj.value,
+    def __str__(self):
+        return f"""
+        Ticker: {self.ticker}
+        Company Name: {self.company_name}
+        Sector: {self.sector}
+        Industry: {self.industry}
+        Market Cap: {self.market_cap}
+        Market: {self.market}
+        Price: {self.price}
+        Sentiment Score: {self.sentiment_score}
+        Institutional Shareholders: {self.institutional_shareholders}
+        Mutual Fund Shareholders: {self.mutual_fund_shareholders}
+        """
+
+    def to_dict(self):
+        """Convert Stock instance to a dictionary for MongoDB insertion."""
+        return {
+            "ticker": self.ticker,
+            "company_name": self.company_name,
+            "sector": self.sector,
+            "industry": self.industry,
+            "market_cap": self.market_cap,
+            "sentiment_score": self.sentiment_score,
+            "market": self.market,
+            "price": list(self.price),  # Convert set to list
+            "related_news": [article.to_dict() for article in self.related_news],
+            "related_stocks": self.related_stocks,
+            "institutional_shareholders": self.institutional_shareholders,
+            "mutual_fund_shareholders": self.mutual_fund_shareholders,
+            "product_involvement_areas": self.product_involvement_areas
         }
 
-    def update_stakeholder(self, name, shares, percentage, value):
-        if name in self.stakeholders:
-            self.stakeholders[name] = {
-                "shares": shares,
-                "percentage": percentage,
-                "value": value,
-            }
+    @staticmethod
+    def insert_stock(stock: 'Stock', collection: Collection):
+        """Insert a single Stock object into the MongoDB collection."""
+        collection.insert_one(stock.to_dict())
+        print(f"Inserted stock: {stock.ticker}")
 
-    def add_mutual_fund_holder(self, mutual_fund_obj):
-        self.mutual_fund_holders[mutual_fund_obj.fund_name] = {
-            "shares": mutual_fund_obj.shares,
-            "percentage": mutual_fund_obj.percentage,
-            "value": mutual_fund_obj.value,
-            "fund_manager": mutual_fund_obj.fund_manager,
-        }
+    @staticmethod
+    def insert_stocks(stocks: list['Stock'], collection: Collection):
+        """Insert multiple Stock objects into the MongoDB collection."""
+        collection.insert_many([stock.to_dict() for stock in stocks])
+        print(f"Inserted {len(stocks)} stocks into MongoDB.")
 
-    def update_mutual_fund_holder(self, fund_name, shares, percentage, value):
-        if fund_name in self.mutual_fund_holders:
-            self.mutual_fund_holders[fund_name] = {
-                "shares": shares,
-                "percentage": percentage,
-                "value": value,
-                "fund_manager": self.mutual_fund_holders[fund_name]["fund_manager"],
-            }
-
-    def display_stakeholders(self):
-        print(f"Stakeholders for {self.company_name} ({self.ticker}):")
-        for name, details in self.stakeholders.items():
-            print(f"  Name: {name}")
-            print(f"    Shares: {details['shares']}")
-            print(f"    Ownership Percentage: {details['percentage']:.2f}%")
-            print(f"    Value: ${details['value']:,.2f}")
-
-    def display_mutual_fund_holders(self):
-        print(f"Mutual Fund Holders for {self.company_name} ({self.ticker}):")
-        for fund_name, details in self.mutual_fund_holders.items():
-            print(f"  Fund Name: {fund_name}")
-            print(f"    Shares: {details['shares']}")
-            print(f"    Ownership Percentage: {details['percentage']:.2f}%")
-            print(f"    Value: ${details['value']:,.2f}")
-            print(f"    Fund Manager: {details['fund_manager']}")
-            
-    def add_related_news(self, news_title, content, author, date_published ,source ,sentiment):
-        self.related_news.append(Article(news_title, content, date_published,author, source))
-
-    def add_related_stock(self, related_ticker, relationship_score):
-        self.related_stocks[related_ticker] = relationship_score
-
-    def display_info(self):
-        print(f"Ticker: {self.ticker}")
-        print(f"Company Name: {self.company_name}")
-        print(f"Sector: {self.sector}")
-        print(f"Market Cap: ${self.market_cap:,.2f}")
-        print(f"Sentiment Score: {self.sentiment_score}")
-        print("Related News:")
-        for news in self.related_news:
-            print(f"  - {news['title']} (Sentiment: {news['sentiment']})")
-        print("Related Stocks:")
-        for stock, score in self.related_stocks.items():
-            print(f"  - {stock}: Relationship Score {score}")
-
-    def yahoo_finance_news_article_url(self):
-        return f"https://finance.yahoo.com/quote/{self.ticker}/news/"
+    def check_if_ticker_exists_in_db(db, ticker):
+        collection = db["stocks"]
+        result = collection.find_one({"ticker": ticker})
+        return result is not None
+    
+        
+        
