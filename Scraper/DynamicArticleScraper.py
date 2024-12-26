@@ -23,24 +23,6 @@ service = Service('/usr/local/bin/chromedriver')
 def setup_driver(service, options):
     return webdriver.Chrome(service=service, options=options)
 
-def retry_on_failure(max_retries=3, delay=5):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            retries = 0
-            while retries < max_retries:
-                try:
-                    return func(*args, **kwargs)
-                except (TimeoutException, WebDriverException) as e:
-                    retries += 1
-                    wait_time = delay * (2 ** (retries - 1))  # Exponential backoff
-                    print(f"Retry {retries}/{max_retries} after error: {e}. Waiting {wait_time}s...")
-                    time.sleep(wait_time)
-            print(f"Failed after {max_retries} attempts. Skipping...")
-            return None  # Return None if all retries fail
-        return wrapper
-    return decorator
-
 
 def check_continue_reading_button(driver, thread_id, link):
     try:
@@ -79,7 +61,7 @@ def check_continue_reading_button(driver, thread_id, link):
                 WebDriverWait(driver, 2).until(
                     EC.element_to_be_clickable((By.XPATH, button_xpath))
                 )
-                print(f"Thread-{thread_id}: 'Continue Reading' button detected. Skipping article...")
+                print(f"Thread-{thread_id}: 'Continue Reading' button detected. Skipping article at {link}")
                 return None
             except NoSuchElementException:
                 continue
@@ -176,7 +158,6 @@ def handle_story_continues(driver, thread_id, link):
     except Exception:
         print(f"Thread-{thread_id}: No 'Story continues' button for {link}.")
 
-@retry_on_failure(max_retries=5, delay=5)
 def scrape_article_information(driver, thread_id, link):
     try:
         driver.get(link)
@@ -196,8 +177,7 @@ def scrape_article_information(driver, thread_id, link):
         print(f"Thread-{thread_id}: Error scraping article at {link}: {e}")
         return None
 
-@retry_on_failure(max_retries=5, delay=5)
-def scrape_links_and_articles(url, results, thread_id, service, options, number_of_links, db, ticker, driver):
+def scrape_links_and_articles(url, results, thread_id, number_of_links, db, ticker, driver):
     try:
         print(f"Thread-{thread_id}: Starting...")
         driver.get(url)
@@ -205,35 +185,43 @@ def scrape_links_and_articles(url, results, thread_id, service, options, number_
         handle_cookie_modal(driver, thread_id)
         links = extract_links(driver, thread_id, number_of_links)
         print(f"Thread-{thread_id}: Extracted {len(links)} links.")
+        
+        scraped_articles = Article.get_article_urls_by_ticker(db, ticker)
 
         for link in links:
-            scraped_articles = Article.get_article_urls_by_ticker(db, ticker)
-            out_of_site_articles = check_continue_reading_button(driver, thread_id, link=link)
             
-            if out_of_site_articles is None:
-                print(f"Skipping article at {link} due to 'Continue Reading' button.")
+            if scraped_articles and link in scraped_articles:
+                print(f"Article exists in database, skipping {link}")
                 continue
-
-            if not scraped_articles or link not in scraped_articles:
-                article_content = scrape_article_information(driver, thread_id, link)
-                author, date_published = extract_author_date_published(driver, thread_id, link)
-                title = extract_title(driver, thread_id, link)
+            
+            can_access_article = check_continue_reading_button(driver, thread_id, link=link)
+            if not can_access_article:  
+                continue
+            
+            article_content = scrape_article_information(driver, thread_id, link)
+            if not article_content:  
+                print(f"No content found for {link}, skipping.")
+                continue
                 
-                if article_content and author and date_published:
-                    results.append({
-                        "title": title,
-                        "content": article_content,
-                        "author": author,
-                        "date_published": date_published,
-                        "url": link
-                    })
+            author, date_published = extract_author_date_published(driver, thread_id, link)
+            title = extract_title(driver, thread_id, link)
+            
+            if author and date_published and title:
+                article = Article(
+                    title=title,
+                    content=article_content,
+                    author=author,
+                    date_published=date_published,
+                    url=link
+                )
+                results.append(article.to_dict())
+                print(f"Article {article.url} Scraped, and added to results list")
             else:
-                print(f"Duplicate article at {link} found, skipping this one.")
-                continue
+                print(f"Missing metadata for {link}, skipping.")
 
     finally:
         print(f"Thread-{thread_id}: Done.")
-
+        
 def scrape_dynamic_links_and_articles(url,ticker ,total_links=20, num_threads=1, db=None, driver=None):
     results = []
     threads = []
@@ -245,7 +233,7 @@ def scrape_dynamic_links_and_articles(url,ticker ,total_links=20, num_threads=1,
     for thread_id in range(num_threads):
         thread = threading.Thread(
             target=scrape_links_and_articles, 
-            args=(url, results, thread_id, service, options, links_per_thread, db, ticker, driver)
+            args=(url, results, thread_id, links_per_thread, db, ticker, driver)
         )
         threads.append(thread)
         thread.start()

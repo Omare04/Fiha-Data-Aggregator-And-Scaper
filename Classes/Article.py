@@ -1,25 +1,20 @@
 from pymongo.collection import Collection
 
 class Article:
-    def __init__(self, title, content, date_published, author, source): 
+    def __init__(self, title, content, date_published, author, url): 
         self.title = title  
         self.content = content
-        self.date_published = date_published
         self.author = author
-        self.source = source
-        self.sentiment_score = None  
-        self.keywords = []  
+        self.date_published = date_published
+        self.url = url
 
     def to_dict(self):
-        """Convert the Article instance to a dictionary for MongoDB insertion."""
         return {
             "title": self.title,
             "content": self.content,
             "date_published": self.date_published,
             "author": self.author,
-            "source": self.source,
-            "sentiment_score": self.sentiment_score,
-            "keywords": self.keywords
+            "url": self.url,
         }
 
     

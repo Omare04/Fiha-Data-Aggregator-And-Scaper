@@ -77,23 +77,32 @@ def insert_stocks_to_db(data, db):
         # url = stock.yahoo_finance_url("/news/")
         # articles = scrape_dynamic_links_and_articles(url, total_links=10, num_threads=2)
         
-def insert_articles_to_db(data, db, driver): 
+def insert_articles_to_db(data, db, driver):
+    start_time = time.time() 
+    
     for corporation in data:
-        ticker = corporation["symbol"]  
+        ticker = corporation["symbol"]
         try:
             if Stock.check_if_ticker_exists_in_db(db, ticker):
                 url = f"https://finance.yahoo.com/quote/{ticker}/news/"
-                articles = scrape_dynamic_links_and_articles(url,ticker=ticker, num_threads=1, total_links=35, db=db, driver=driver)
-                print(articles)
-
-                if articles: 
+                articles = scrape_dynamic_links_and_articles(url, ticker=ticker, num_threads=1, total_links=20, db=db, driver=driver)
+                
+                if articles:
                     db["articles"].insert_many([{"article": article, "company": ticker} for article in articles])
+                    print(f"Successfully inserted articles for {ticker} 😃😃😃😃😃😃😃😃")
+
         except Exception as e:
             print(f"Error processing {ticker}: {e}")
-                
-            
-
     
-        
+    end_time = time.time()  
+    elapsed_time = end_time - start_time
+    
+    hours = int(elapsed_time // 3600)
+    minutes = int((elapsed_time % 3600) // 60)
+    seconds = int(elapsed_time % 60)
+    
+    print(f"\nTotal execution time: {hours} hours, {minutes} minutes, {seconds} seconds to scrape {len(data)} company articles")
+    print(f"Raw execution time: {elapsed_time:.2f} seconds")
+    
 if __name__ == "__main__":
     main()

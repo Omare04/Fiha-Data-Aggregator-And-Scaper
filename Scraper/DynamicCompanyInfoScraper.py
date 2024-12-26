@@ -11,11 +11,11 @@ from Scraper.DynamicArticleScraper import handle_cookie_modal
 import requests
 
 options = Options()
-options.add_argument('--headless')  # Headless for speed
+options.add_argument('--headless')  
 options.add_argument('--disable-gpu')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
-options.page_load_strategy = 'eager'  # Only load essential content
+options.page_load_strategy = 'eager'  
 service = Service('/usr/local/bin/chromedriver')
 
 
