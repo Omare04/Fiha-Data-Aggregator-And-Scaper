@@ -7,15 +7,89 @@ from selenium.webdriver.support import expected_conditions as EC
 import threading
 import time
 from Classes.Article import Article
+from selenium.common.exceptions import TimeoutException, WebDriverException, NoSuchElementException
+import functools
 # Global Selenium options and service
 options = Options()
 options.add_argument('--headless') 
+options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 options.add_argument('--disable-gpu')
+options.add_argument("--disable-blink-features=AutomationControlled")
+options.add_experimental_option("excludeSwitches", ["enable-automation"])
+options.add_experimental_option("useAutomationExtension", False)
 service = Service('/usr/local/bin/chromedriver')
 
 
 def setup_driver(service, options):
     return webdriver.Chrome(service=service, options=options)
+
+def retry_on_failure(max_retries=3, delay=5):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except (TimeoutException, WebDriverException) as e:
+                    retries += 1
+                    wait_time = delay * (2 ** (retries - 1))  # Exponential backoff
+                    print(f"Retry {retries}/{max_retries} after error: {e}. Waiting {wait_time}s...")
+                    time.sleep(wait_time)
+            print(f"Failed after {max_retries} attempts. Skipping...")
+            return None  # Return None if all retries fail
+        return wrapper
+    return decorator
+
+
+def check_continue_reading_button(driver, thread_id, link):
+    try:
+        driver.get(link)
+        
+        WebDriverWait(driver, 10).until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+        
+        # Handle bot detection 
+        if "<body></body>" in driver.page_source:
+            print("Detected bot block - page did not load properly.")
+            return True
+        
+        button_xpath = "//button[contains(@class, 'continue-reading-button')]"
+        
+        # Scroll once to load potential dynamic
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
+        time.sleep(1)
+        
+        #incremental scroll 
+        max_attempts = 4
+        scroll_attempts = 0
+        
+        while scroll_attempts < max_attempts:
+            driver.execute_script("window.scrollBy(0, 600);") 
+            scroll_attempts += 1
+            time.sleep(0.3)
+
+            # Look for button during each scroll attempt
+            try:
+                button = driver.find_element(By.XPATH, button_xpath)
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                
+            
+                WebDriverWait(driver, 2).until(
+                    EC.element_to_be_clickable((By.XPATH, button_xpath))
+                )
+                print(f"Thread-{thread_id}: 'Continue Reading' button detected. Skipping article...")
+                return None
+            except NoSuchElementException:
+                continue
+
+        print(f"Thread-{thread_id}: No 'Continue Reading' button found for link {link}. Continuing...")
+        return True
+
+    except Exception as e:
+        print(f"Thread-{thread_id}: Unexpected error for link {link}: {e}")
+        return True
 
 
 def handle_cookie_modal(driver, thread_id):
@@ -60,27 +134,35 @@ def extract_title(driver, thread_id, link):
         
 def extract_author_date_published(driver, thread_id, link):
     try:
-        # Extract the author
-        author_element = driver.find_element(By.CLASS_NAME, "byline-attr-author.yf-1k5w6kz")
+        wait = WebDriverWait(driver, 10)  
+        author_element = wait.until(
+            EC.presence_of_element_located((By.CLASS_NAME, "byline-attr-author.yf-1k5w6kz"))
+        )
         author = author_element.text.strip() if author_element else None
 
-        # Extract the date published
-        date_published_element = driver.find_element(By.CLASS_NAME, "byline-attr-meta-time")
+        date_published_element = wait.until(
+            EC.presence_of_element_located((By.CLASS_NAME, "byline-attr-meta-time"))
+        )
         date_published = date_published_element.get_attribute("datetime") if date_published_element else None
 
-        # Check if author exists
         if author:
             return author, date_published
         else:
             print(f"Thread-{thread_id}: No author found for this article at {link}")
             return None, date_published
 
+    except TimeoutException:
+        print(f"Thread-{thread_id}: Timeout while scraping author or date published at {link}.")
+        return None, None
+    except NoSuchElementException:
+        print(f"Thread-{thread_id}: Author or date element not found at {link}.")
+        return None, None
     except Exception as e:
         print(f"Thread-{thread_id}: Error scraping author or date published at {link}: {e}")
         return None, None
         
 def handle_story_continues(driver, thread_id, link):
-    """Handles 'Story continues' or 'Continue Reading' buttons on article pages."""
+    
     try:
         story_continues_button = WebDriverWait(driver, 5).until(
             EC.presence_of_element_located((By.CLASS_NAME, "secondary-btn.fin-size-large.readmore-button.rounded.yf-15mk0m"))
@@ -94,13 +176,13 @@ def handle_story_continues(driver, thread_id, link):
     except Exception:
         print(f"Thread-{thread_id}: No 'Story continues' button for {link}.")
 
+@retry_on_failure(max_retries=5, delay=5)
 def scrape_article_information(driver, thread_id, link):
     try:
         driver.get(link)
         handle_story_continues(driver, thread_id, link)
         article_content = ""
 
-        # Extract all visible paragraphs
         paragraphs = driver.find_elements(By.CLASS_NAME, "yf-1pe5jgt")
         for paragraph in paragraphs:
             article_content += paragraph.text.strip() + " "
@@ -114,29 +196,41 @@ def scrape_article_information(driver, thread_id, link):
         print(f"Thread-{thread_id}: Error scraping article at {link}: {e}")
         return None
 
+@retry_on_failure(max_retries=5, delay=5)
 def scrape_links_and_articles(url, results, thread_id, service, options, number_of_links, db, ticker, driver):
     try:
         print(f"Thread-{thread_id}: Starting...")
         driver.get(url)
 
         handle_cookie_modal(driver, thread_id)
-
-        # Extract links
         links = extract_links(driver, thread_id, number_of_links)
         print(f"Thread-{thread_id}: Extracted {len(links)} links.")
-        
-        # Scrape articles
+
         for link in links:
-            scraped_articles = Article.get_article_urls_by_ticker(db,ticker)
+            scraped_articles = Article.get_article_urls_by_ticker(db, ticker)
+            out_of_site_articles = check_continue_reading_button(driver, thread_id, link=link)
+            
+            if out_of_site_articles is None:
+                print(f"Skipping article at {link} due to 'Continue Reading' button.")
+                continue
+
             if not scraped_articles or link not in scraped_articles:
                 article_content = scrape_article_information(driver, thread_id, link)
                 author, date_published = extract_author_date_published(driver, thread_id, link)
                 title = extract_title(driver, thread_id, link)
+                
                 if article_content and author and date_published:
-                    results.append({"title": title, "content": article_content, "author":author, "date_published": date_published, "url": link})
+                    results.append({
+                        "title": title,
+                        "content": article_content,
+                        "author": author,
+                        "date_published": date_published,
+                        "url": link
+                    })
             else:
                 print(f"Duplicate article at {link} found, skipping this one.")
                 continue
+
     finally:
         print(f"Thread-{thread_id}: Done.")
 
@@ -165,17 +259,9 @@ def scrape_dynamic_links_and_articles(url,ticker ,total_links=20, num_threads=1,
     print(f"Collected {len(results)} articles in {elapsed_time:.2f} seconds.")  
     return results
 
-def check_if_article_requires_subscription(driver, thread_id, link):
-    publishers = driver.find_element((By.CLASS_NAME, "publishing yf-1weyqlp"))
-    
-    #Also iterate though all of the items 
-    #Have a list of predefined publishers that require subsriptions example below dict
-    publishers_w_subscriptions = {}
-    for publisher in publishers:
-        if publisher in publishers_w_subscriptions:
-            return
-
+#Test Individual functions for consistency
 if __name__ == "__main__":
+    driver  = setup_driver(service, options)
     url = "https://finance.yahoo.com/quote/TSLA/news/"
-    articles = scrape_dynamic_links_and_articles(url, total_links=5, num_threads=2)
-    print(articles)
+    result = check_continue_reading_button(driver, 0, "https://finance.yahoo.com/m/4205eaa9-f620-3a0b-a81a-0e82c7c9fd0b/magnificent-seven-stocks-.html")
+    print(f"this is the result: {result}")

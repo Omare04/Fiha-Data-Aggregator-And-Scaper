@@ -20,11 +20,16 @@ from selenium.webdriver.support import expected_conditions as EC
 import threading
 import time
 from Classes.Article import Article
+from database import start_db, stop_db
 # Global Selenium options and service
 options = Options()
 options.add_argument('--headless') 
 options.add_argument('--disable-gpu')
 service = Service('/usr/local/bin/chromedriver')
+options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+options.add_argument("--disable-blink-features=AutomationControlled")
+options.add_experimental_option("excludeSwitches", ["enable-automation"])
+options.add_experimental_option("useAutomationExtension", False)
 
 
 def setup_driver(service, options):
@@ -33,18 +38,17 @@ def setup_driver(service, options):
 # C4WM5R86421K4HGQ
 
 def main():
-    # Start MongoDB server
-    # start_mongo()
-    # time.sleep(5)  # Wait to ensure MongoDB is fully initialized
 
-    db = get_database()
     driver = setup_driver(service, options)
     
-    with open("./nasdaq100.json", "r") as file: 
-        nasdaq100 = json.load(file)
+    with open("./biggest_companies.json", "r") as file: 
+        biggest_companies = json.load(file)
     try:
-        insert_articles_to_db(nasdaq100, db, driver)
+        start_db.start_mongo()
+        db = get_database()
+        insert_articles_to_db(biggest_companies, db, driver)
     finally:
+        stop_db.stop_mongo()
         driver.quit()
         print("Webdriver closed")
         
@@ -79,7 +83,7 @@ def insert_articles_to_db(data, db, driver):
         try:
             if Stock.check_if_ticker_exists_in_db(db, ticker):
                 url = f"https://finance.yahoo.com/quote/{ticker}/news/"
-                articles = scrape_dynamic_links_and_articles(url,ticker=ticker, num_threads=1, total_links=20, db=db, driver=driver)
+                articles = scrape_dynamic_links_and_articles(url,ticker=ticker, num_threads=1, total_links=35, db=db, driver=driver)
                 print(articles)
 
                 if articles: 
